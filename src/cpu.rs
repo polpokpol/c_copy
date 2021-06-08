@@ -1,12 +1,41 @@
 use std::collections::HashMap;
 use crate::opcodes;
 
+bitflags! {
+  /// # Status Register (P) http://wiki.nesdev.com/w/index.php/Status_flags
+  ///
+  ///  7 6 5 4 3 2 1 0
+  ///  N V _ B D I Z C
+  ///  | |   | | | | +--- Carry Flag
+  ///  | |   | | | +----- Zero Flag
+  ///  | |   | | +------- Interrupt Disable
+  ///  | |   | +--------- Decimal Mode (not used on NES)
+  ///  | |   +----------- Break Command
+  ///  | +--------------- Overflow Flag
+  ///  +----------------- Negative Flag
+  ///
+  pub struct CpuFlags: u8 {
+      const CARRY             = 0b00000001;
+      const ZERO              = 0b00000010;
+      const INTERRUPT_DISABLE = 0b00000100;
+      const DECIMAL_MODE      = 0b00001000;
+      const BREAK             = 0b00010000;
+      const BREAK2            = 0b00100000;
+      const OVERFLOW          = 0b01000000;
+      const NEGATIV           = 0b10000000;
+  }
+}
+
+const STACK: u16 = 0x0100;
+const STACK_RESET: u8 = 0xfd;
+
 pub struct CPU {
   pub register_a: u8,
   pub register_x: u8,
   pub register_y: u8,
-  pub status: u8,
+  pub status: CpuFlags,
   pub program_counter: u16,
+  pub stack_pointer: u8,
   memory: [u8; 0xFFFF]
 }
 
@@ -61,7 +90,8 @@ impl CPU {
       register_a: 0,
       register_x: 0,
       register_y: 0,
-      status: 0,
+      stack_pointer: STACK_RESET,
+      status: CpuFlags::from_bits_truncate(0b100100),
       program_counter: 0,
       memory: [0; 0xFFFF]
     }
@@ -81,7 +111,7 @@ impl CPU {
         let addr = pos.wrapping_add(self.register_x) as u16;
         addr
       }
-    AddressingMode::ZeroPage_Y => {
+      AddressingMode::ZeroPage_Y => {
         let pos = self.mem_read(self.program_counter);
         let addr = pos.wrapping_add(self.register_y) as u16;
         addr
@@ -96,7 +126,7 @@ impl CPU {
         let base = self.mem_read_u16(self.program_counter);
         let addr = base.wrapping_add(self.register_y as u16);
         addr
-    }
+      }
 
       AddressingMode::Indirect_X => {
         let base = self.mem_read(self.program_counter);
@@ -123,6 +153,21 @@ impl CPU {
 
   }
 
+  fn ldy(&mut self, mode: &AddressingMode){
+    let addr = self.get_operand_address(mode);
+    let data = self.mem_read(addr);
+
+    self.register_y = data;
+    self.update_zero_and_negative_flags(self.register_y);
+  }
+
+  fn ldx(&mut self, mode: &AddressingMode) {
+    let addr = self.get_operand_address(mode);
+    let data = self.mem_read(addr);
+    self.register_x = data;
+    self.update_zero_and_negative_flags(self.register_x);
+}
+
   fn lda(&mut self, mode: &AddressingMode) {
     let addr = self.get_operand_address(&mode);
     let value = self.mem_read(addr);
@@ -136,11 +181,35 @@ impl CPU {
     self.mem_write(addr, self.register_a);
   }
 
+  fn set_register_a(&mut self, value: u8) {
+    self.register_a = value;
+    self.update_zero_and_negative_flags(self.register_a);
+  }
+
+  fn and(&mut self, mode: &AddressingMode){
+    let addr = self.get_operand_address(mode);
+    let data = self.mem_read(addr);
+    self.set_register_a(data & self.register_a);
+  }
+
+  fn eor(&mut self, mode: &AddressingMode) {
+    let addr = self.get_operand_address(mode);
+    let data = self.mem_read(addr);
+    self.set_register_a(data ^ self.register_a);
+  }
+
+  fn ora(&mut self, mode: &AddressingMode) {
+    let addr = self.get_operand_address(mode);
+    let data = self.mem_read(addr);
+    self.set_register_a(data | self.register_a);
+  }
+
   fn tax(&mut self) {
     self.register_x = self.register_a;
     self.update_zero_and_negative_flags(self.register_x);
   }
 
+  // will get it done. still need some understanding
   fn update_zero_and_negative_flags(&mut self, result: u8) {
     if result == 0 {
       self.status = self.status | 0b0000_0010;
@@ -157,6 +226,11 @@ impl CPU {
 
   fn inx(&mut self) {
     self.register_x = self.register_x.wrapping_add(1);
+    self.update_zero_and_negative_flags(self.register_x);
+  }
+
+  fn iny(&mut self){
+    self.register_y = self.register_y.wrapping_add(1);
     self.update_zero_and_negative_flags(self.register_x);
   }
 
