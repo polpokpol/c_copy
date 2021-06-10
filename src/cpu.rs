@@ -15,14 +15,14 @@ bitflags! {
   ///  +----------------- Negative Flag
   ///
   pub struct CpuFlags: u8 {
-      const CARRY             = 0b00000001;
-      const ZERO              = 0b00000010;
-      const INTERRUPT_DISABLE = 0b00000100;
-      const DECIMAL_MODE      = 0b00001000;
-      const BREAK             = 0b00010000;
-      const BREAK2            = 0b00100000;
-      const OVERFLOW          = 0b01000000;
-      const NEGATIV           = 0b10000000;
+    const CARRY             = 0b00000001;
+    const ZERO              = 0b00000010;
+    const INTERRUPT_DISABLE = 0b00000100;
+    const DECIMAL_MODE      = 0b00001000;
+    const BREAK             = 0b00010000;
+    const BREAK2            = 0b00100000;
+    const OVERFLOW          = 0b01000000;
+    const NEGATIV           = 0b10000000;
   }
 }
 
@@ -212,15 +212,15 @@ impl CPU {
   // will get it done. still need some understanding
   fn update_zero_and_negative_flags(&mut self, result: u8) {
     if result == 0 {
-      self.status = self.status | 0b0000_0010;
+      self.status.insert(CpuFlags::ZERO);
     } else {
-      self.status = self.status & 0b1111_1101;
+      self.status.remove(CpuFlags::ZERO);
     }
 
     if result & 0b1000_0000 != 0 {
-      self.status = self.status | 0b1000_0000;
+      self.status.insert(CpuFlags::ZERO);
     } else {
-      self.status = self.status & 0b0111_1111;
+      self.status.remove(CpuFlags::ZERO);
     }
   }
 
@@ -249,9 +249,17 @@ impl CPU {
     self.register_a = 0;
     self.register_x = 0;
     self.register_y = 0;
-    self.status = 0;
+    self.status = CpuFlags::from_bits_truncate(0b100100);
 
     self.program_counter = self.mem_read_u16(0xFFFC);
+  }
+
+  fn set_carry_flag(&mut self){
+    self.status.insert(CpuFlags::CARRY);
+  }
+
+  fn clear(&mut self){
+    self.status.remove(CpuFlags::CARRY);
   }
 
   pub fn run(&mut self) {
@@ -296,7 +304,9 @@ mod test {
     let mut cpu = CPU::new();
     cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
     assert_eq!(cpu.register_a, 5);
-    assert!(cpu.status & 0b0000_0010 == 0);
-    assert!(cpu.status & 0b1000_0000 == 0);
+    // assert!(cpu.status & 0b0000_0010 == 0);
+    // assert!(cpu.status & 0b1000_0000 == 0);
+    assert!(cpu.status.bits() & 0b0000_0010 == 0b00);
+    assert!(cpu.status.bits() & 0b1000_0000 == 0);
   }
 }
