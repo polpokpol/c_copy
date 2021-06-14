@@ -258,8 +258,12 @@ impl CPU {
     self.status.insert(CpuFlags::CARRY);
   }
 
-  fn clear(&mut self){
+  fn clear_carry_flag(&mut self){
     self.status.remove(CpuFlags::CARRY);
+  }
+
+  fn add_to_register_a(&mut self, data: u8){
+    todo!();
   }
 
   pub fn run(&mut self) {
